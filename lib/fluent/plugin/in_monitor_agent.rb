@@ -40,6 +40,12 @@ module Fluent::Plugin
     config_param :include_config, :bool, default: true
     desc 'Determine whether to include the retry information.'
     config_param :include_retry, :bool, default: true
+    desc 'Enable health check endpoint'
+    config_param :health_check_enabled, :bool, default: false
+    desc 'Health check path'
+    config_param :health_check_path, :string, default: '/api/health'
+    desc 'Health check details'
+    config_param :health_check_details, :bool, default: false
 
     class APIHandler
       def initialize(agent)
@@ -188,6 +194,9 @@ module Fluent::Plugin
     def configure(conf)
       super
       @port += fluentd_worker_id
+      @health_check_enabled = conf['health_check_enabled'] || false
+      @health_check_path = conf['health_check_path'] || '/api/health'
+      @health_check_details = conf['health_check_details'] || false
     end
 
     def multi_workers_ready?
@@ -414,6 +423,79 @@ module Fluent::Plugin
         break
       }
       opts
+    end
+
+    def build_connect_and_response(env)
+      # Add health check endpoint
+      if @health_check_enabled && env['PATH_INFO'] == @health_check_path
+        return ['200 OK', {'Content-Type' => 'application/json'}, [generate_health_check_response.to_json]]
+      end
+      
+      # ... existing code ...
+    end
+    
+    def generate_health_check_response
+      response = {
+        'status' => 'ok',
+        'timestamp' => Time.now.to_i
+      }
+      
+      if @health_check_details
+        # Collect detailed health information
+        response['details'] = {
+          'buffer_stats' => collect_buffer_stats,
+          'retry_stats' => collect_retry_stats,
+          'plugin_stats' => collect_plugin_stats
+        }
+      end
+      
+      response
+    end
+    
+    def collect_buffer_stats
+      stats = {}
+      plugin_instances.each do |instance|
+        next unless instance.respond_to?(:buffer) && instance.buffer
+        
+        plugin_id = instance.plugin_id || instance.class.name
+        stats[plugin_id] = {
+          'buffer_queue_length' => instance.buffer.queue.size,
+          'buffer_total_queued_size' => instance.buffer.total_queued_chunk_size,
+          'buffer_available_space' => instance.buffer.available_buffer_space_ratio
+        }
+      end
+      stats
+    end
+    
+    def collect_retry_stats
+      stats = {}
+      plugin_instances.each do |instance|
+        next unless instance.respond_to?(:retry_state)
+        
+        plugin_id = instance.plugin_id || instance.class.name
+        retry_state = instance.retry_state
+        
+        if retry_state
+          stats[plugin_id] = {
+            'retry_count' => retry_state.retry_count,
+            'next_retry_time' => retry_state.next_time.to_i
+          }
+        end
+      end
+      stats
+    end
+    
+    def collect_plugin_stats
+      stats = {}
+      plugin_instances.each do |instance|
+        plugin_id = instance.plugin_id || instance.class.name
+        stats[plugin_id] = {
+          'plugin_type' => instance.class.name,
+          'plugin_category' => plugin_category(instance),
+          'retry_count' => instance.instance_variable_get(:@num_errors) || 0
+        }
+      end
+      stats
     end
   end
 end

@@ -112,6 +112,19 @@ module Fluent
     end
 
     def emit_stream(tag, es)
+      # Check if circuit is open for this tag
+      if @circuit_breaker_enabled && @circuit_open_until[tag] > 0
+        if Time.now.to_i < @circuit_open_until[tag]
+          log.debug "Circuit breaker is open for tag: #{tag}, dropping events"
+          return
+        else
+          # Reset circuit breaker
+          log.info "Circuit breaker timeout elapsed for tag: #{tag}, resetting"
+          @circuit_open_until[tag] = 0
+          @error_counts[tag] = 0
+        end
+      end
+      
       match(tag).emit_events(tag, es)
       if callback = find_callback
         callback.call(es)
@@ -120,6 +133,9 @@ module Fluent
       @emit_error_handler.handle_emits_error(tag, e.processed_es, e.internal_error)
     rescue => e
       @emit_error_handler.handle_emits_error(tag, es, e)
+    ensure
+      # Reset error count on successful emit
+      @error_counts[tag] = 0 if @circuit_breaker_enabled
     end
 
     def emit_error_event(tag, time, record, error)
@@ -135,6 +151,30 @@ module Fluent
         @default_collector
       }
       collector
+    end
+
+    # Add circuit breaker functionality to the event router
+    def configure(system_config)
+      @circuit_breaker_enabled = system_config.circuit_breaker_enabled
+      @circuit_breaker_threshold = system_config.circuit_breaker_threshold
+      @circuit_breaker_timeout = system_config.circuit_breaker_timeout
+      @error_counts = Hash.new(0)
+      @circuit_open_until = Hash.new(0)
+    end
+
+    def emit_error_handler(tag, time, record, error)
+      if @circuit_breaker_enabled
+        @error_counts[tag] += 1
+        
+        if @error_counts[tag] >= @circuit_breaker_threshold
+          # Open the circuit
+          @circuit_open_until[tag] = Time.now.to_i + @circuit_breaker_timeout
+          log.warn "Circuit breaker opened for tag: #{tag} due to #{@error_counts[tag]} consecutive errors"
+          @error_counts[tag] = 0
+        end
+      end
+      
+      @emit_error_handler.emit_error_event(tag, time, record, error)
     end
 
     class MatchCache

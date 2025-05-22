@@ -132,6 +132,13 @@ module Fluent
       register_type(name, type)
     end
 
+    # Add circuit breaker configuration parameters
+    CONFIG_PARAM_CIRCUIT_BREAKER = {
+      circuit_breaker_enabled: [true, :bool, "Enable circuit breaker functionality", false],
+      circuit_breaker_threshold: [5, :integer, "Number of consecutive errors before opening circuit", false],
+      circuit_breaker_timeout: [60, :integer, "Time in seconds to keep circuit open", false]
+    }
+
     module ClassMethods
       def configure_proxy_map
         map = {}
@@ -173,6 +180,13 @@ module Fluent
         variable_name = configure_proxy(self.name).sections[name].variable_name
         if !section_already_exists && !self.respond_to?(variable_name)
           attr_accessor variable_name
+        end
+        
+        # Add circuit breaker parameters to system section
+        if name == :system
+          CONFIG_PARAM_CIRCUIT_BREAKER.each do |name, (default, type, desc, secret)|
+            config_param(name, type, default: default, secret: secret, desc: desc)
+          end
         end
       end
 
