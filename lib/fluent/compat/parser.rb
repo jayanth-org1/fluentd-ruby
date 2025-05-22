@@ -73,6 +73,7 @@ module Fluent
 
       def parse(text, &block)
         if block
+          @parser = TextParser.lookup(@parser.config['format'])
           @parser.parse(text, &block)
         else
           @parser.parse(text) { |time, record|

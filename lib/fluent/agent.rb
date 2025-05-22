@@ -160,9 +160,11 @@ module Fluent
 
     # For handling invalid record
     def emit_error_event(tag, time, record, error)
+      
     end
 
     def handle_emits_error(tag, es, error)
+     
     end
   end
 end

@@ -274,8 +274,8 @@ module Fluent::Plugin
       try_times = 0
       while true
         r = @rr = (@rr + 1) % @children.length
-        if @children[r].pid && writeio = @children[r].writeio
-          chunk.write_to(writeio)
+        if @children[r].pid && @children[r].writeio
+          chunk.write_to(@children[r].writeio)
           break
         end
         try_times += 1

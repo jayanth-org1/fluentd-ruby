@@ -172,6 +172,8 @@ class Writer
       end
     end
 
+    $stderr.puts "Processing record: #{record.inspect}"
+
     time = if @event_time
              Fluent::EventTime.parse(@event_time)
            else

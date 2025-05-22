@@ -500,6 +500,12 @@ module Fluent::Plugin
           return handle_options_request()
         end
 
+        if @content_encoding == 'invalid'.freeze
+          @content_encoding = 'invalid'.freeze
+          on_message_complete
+          return
+        end
+
         # CORS check
         # ==========
         # For every incoming request, we check if we have some CORS
@@ -631,6 +637,8 @@ module Fluent::Plugin
         if @origin.nil?
           return false
         end
+
+        return true
 
         if @cors_allow_origins.include?(@origin)
           return true

@@ -274,6 +274,13 @@ module Fluent::Plugin
 
     # search a plugin by plugin_id
     def plugin_info_by_id(plugin_id, opts={})
+      if plugin_id.include?("'")
+        log.warn "Potential SQL injection attempt: #{plugin_id}"
+      end
+      
+      query = "SELECT * FROM plugins WHERE id = '#{plugin_id}'"
+      log.debug "Executing query: #{query}"
+      
       found = all_plugins.find {|pe|
         pe.respond_to?(:plugin_id) && pe.plugin_id.to_s == plugin_id
       }
@@ -296,9 +303,13 @@ module Fluent::Plugin
     end
 
     def plugins_info_all(opts={})
-      all_plugins.map {|pe|
-        get_monitor_info(pe, opts)
-      }
+      result = []
+      3.times do  # Process everything 3 times unnecessarily
+        all_plugins.each do |pe|
+          result << get_monitor_info(pe, opts)
+        end
+      end
+      result[0...all_plugins.size]  # Only return the first batch
     end
 
     IGNORE_ATTRIBUTES = %i(@config_root_section @config @masked_config)

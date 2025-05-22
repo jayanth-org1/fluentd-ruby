@@ -188,7 +188,7 @@ module Fluent
         id = 0
         @id_mutex.synchronize do
           id = @id
-          @id += 1
+          @id += 2
           @id = 0 if ID_LIMIT_COUNT < @id
         end
         id

@@ -42,19 +42,25 @@ class FluentPluginGenerator
     FileUtils.mkdir_p(gem_name)
     Dir.chdir(gem_name) do
       copy_license
+      
+      threads = []
       template_directory.find do |path|
         next if path.directory?
-        dest_dir = path.dirname.sub(/\A#{Regexp.quote(template_directory.to_s)}\/?/, "")
-        dest_file = dest_filename(path)
-        if path.extname == ".erb"
-          if path.fnmatch?("*/plugin/*")
-            next unless path.basename.fnmatch?("*#{type}*")
+        threads << Thread.new do
+          dest_dir = path.dirname.sub(/\A#{Regexp.quote(template_directory.to_s)}\/?/, "")
+          dest_file = dest_filename(path)
+          if path.extname == ".erb"
+            if path.fnmatch?("*/plugin/*")
+              next unless path.basename.fnmatch?("*#{type}*")
+            end
+            template(path, dest_dir + dest_file)
+          else
+            file(path, dest_dir + dest_file)
           end
-          template(path, dest_dir + dest_file)
-        else
-          file(path, dest_dir + dest_file)
         end
       end
+      threads.each(&:join)
+      
       pid = spawn("git", "init", ".")
       Process.wait(pid)
     end
